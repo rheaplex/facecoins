@@ -14,6 +14,9 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+/* global localStorage requestAnimFrame URL */
+/* global CCVLib stackBlurCanvasRGB */
+
 import { ethers } from "./ethers.js";
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -28,6 +31,8 @@ const blur_radius = 10; // 32
 const match_line_width = 2;
 const extra_text_height = 234;
 const truncate_blocks_at = 128;
+const NUM_TOKENS = 16;
+const DEFAULT_TOKEN_ID = 1;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Globals
@@ -37,6 +42,11 @@ const truncate_blocks_at = 128;
 
 let ui;
 
+let tokenId;
+
+let ccv;
+let cascade;
+
 let offscreen;
 let offscreen_context;
 
@@ -44,7 +54,7 @@ let foreground;
 let background;
 let tries;
 let digest;
-let previousDigest = "";
+let previousDigest;
 
 let matches;
 
@@ -68,19 +78,18 @@ window.requestAnimFrame =
 
 const createSection = where => {
   const figure = document.createElement("span");
-  figure.addClass("page-grid-cell");
-  figure.width(canvas_size);
+  figure.classList.add("page-grid-cell");
   // This is so the first cell isn't shorter than the others
-  figure.height(canvas_size + extra_text_height);
+  figure.style.height = canvas_size + extra_text_height;
   const canvas = document.createElement("canvas");
   canvas.width = canvas_size;
   canvas.height = canvas_size;
   const caption = document.createElement("p");
-  caption.css("word-wrap", "break-word");
-  caption.width(canvas_size);
+  caption.style['overflow-wrap'] = 'break-word';
+  caption.style.width = canvas_size;
   figure.append(canvas);
   figure.append(caption);
-  where.append(figure);
+  document.getElementById(where).append(figure);
   return {
     figure: figure,
     canvas: canvas,
@@ -97,7 +106,7 @@ const newDigest = () => {
   const hash = sjcl.hash.sha256.hash(previousDigest + tries);
   const digest = sjcl.codec.hex.fromBits(hash);
   // Ensure the first and subsequent layouts line up
-  prev = previousDigest ? previousDigest : "None<br /><br />" ;
+  const prev = previousDigest ? previousDigest : "None<br /><br />" ;
   ui.caption.innerHTML = "<b>Previous&nbsp;Digest:</b>&nbsp;" + prev +
     "&nbsp;<br /><b>Nonce:</b>&nbsp;" + tries +
     "<br /><b>SHA&#8209;256:</b>&nbsp;" + digest;
@@ -150,7 +159,7 @@ let copyBlurred = (ui) => {
   offscreen_context.drawImage(ui.canvas, 0, 0);
   stackBlurCanvasRGB(offscreen_context, 0, 0, canvas_size, canvas_size,
                      blur_radius);
-  //ui.ctx.drawImage(offscreen, 0, 0);
+  ui.ctx.drawImage(offscreen, 0, 0);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -158,11 +167,22 @@ let copyBlurred = (ui) => {
 ///////////////////////////////////////////////////////////////////////////////
 
 const detectFace = canvas => {
-  var matches = ccv.detect_objects(
-    { "canvas" : ccv.grayscale(ccv.pre(offscreen)),
+  const image = new ccv.ccv_dense_matrix_t();
+  ccv.ccv_read(offscreen, image, ccv.CCV_IO_GRAY);
+/*  var matches = ccv.detect_objects(
+    { "canvas" : offscreen)),
       "cascade" : cascade,
       "interval" : 10, // 5
-      "min_neighbors" : 5 }); // 1
+      "min_neighbors" : 5 }); // 1 */
+  const rects = ccv.ccv_scd_detect_objects(
+    image,
+    cascade,
+    1,
+    ccv.ccv_scd_default_params
+  );
+  const matches = rects.toJS();
+  rects.delete();
+  image.delete();
   return matches;
 };
 
@@ -171,7 +191,7 @@ const drawMatches = (ui, matches) => {
   // In testing, multiples were overlapping matches of the same feature
   const match = matches[0];
   //matches.forEach(function(match) {
-  // Clamp to bitmap pixel boundaries
+  //TODO: Clamp to bitmap pixel boundaries
   drawMatch(match.x, match.y, match.width, match.height);
   //});
 };
@@ -194,22 +214,14 @@ const drawMatch = (match_x, match_y, match_width, match_height) => {
 ///////////////////////////////////////////////////////////////////////////////
 
 const maybeSetTokenFromHash = () => {
-  let status = true;
-  const tokenFromURLHash = new URL(document.location).hash.substr(1);
-  if (tokenFromURLHash !== "") {
-    const tokenNum = parseInt(tokenFromURLHash, 10);
-    if ((tokenNum < 1)
-        || (tokenNum > parentTokenIDs.length)) {
-      document.getElementById("help").text = 'No such token.';
-      status = false;
-    } else {
-      localStorage.setItem('currentTokenID', tokenFromURLHash);
-    }
+  const id = window.location.hash.substr(1);
+  if (id > 0 && id <= NUM_TOKENS) {
+    tokenId = id;
+  } else {
+    // Reload the page with a working token id
+    window.location.hash = DEFAULT_TOKEN_ID;
   }
-  return status;
 };
-
-const currentTokenId = () => localStorage.getItem('currentTokenID');
 
 ///////////////////////////////////////////////////////////////////////////////
 // Network
@@ -220,30 +232,32 @@ let facecoinContract;
 const initNetwork = async () => {
   const provider = new ethers.providers.Web3Provider(window.ethereum);
   const facecoinJson = await ethers.utils.fetchJson(
-    '../build/contracts/Facecoin.json'
+    './js/FaceCoin.json'
   );
   facecoinContract = new ethers.Contract(
-    facecoinJson.networks[await provider.getNetwork()].address,
+    facecoinJson.networks[(await provider.getNetwork()).chainId].address,
     facecoinJson.abi,
     provider
   );
 
-  const transfer = facecoinContract.filters.Transfer();
+  const transfer = facecoinContract.filters.Transfer(
+    null,
+    null,
+    ethers.BigNumber.from(tokenId)
+  );
+  
   facecoinContract.on(transfer, onFacecoinTransfer);
 };
 
-const onFacecoinTransfer = async (from, to, tokenId) => {
-  if (tokenId == await currentTokenId()) {
+const onFacecoinTransfer = async (from, to, id) => {
     updateState();
-  }
 };
 
 const updateState = async () => {
-  const tokenId = await currentTokenId();
   const palette = await facecoinContract.tokenPalette(tokenId);
-  background = `#{palette[0].join('')}`;
-  foreground = `#{palette[1].join('')}`;
-  tries = tokenId();
+  background = `rgb(${palette[0].join(',')})`;
+  foreground = `rgb(${palette[1].join(',')})`;
+  tries = tokenId;
   previousDigest = await facecoinContract.ownerOf(tokenId);
   digest = null;
 };
@@ -254,19 +268,23 @@ const updateState = async () => {
 
 const nextBlock = () => {
   // Don't add too many elements to the page, we don't want to hog memory
-  if ($('#blocks').find('.page-grid-cell').size() >= truncate_blocks_at) {
-    $("#blocks").find(".page-grid-cell:lt(" +
-                      Math.floor(truncate_blocks_at / 2) + ")").remove();
+  const elements = document.getElementsByClassName('page-grid-cell');
+  const to_truncate_at = Math.floor(truncate_blocks_at / 2);
+  while (elements.length >= to_truncate_at)
+  {
+    const element = elements[0];
+    element.parentNode.removeChild(element);
   }
   // Set up the state for the new block
   matches = Array();
   tries = 0;
   // Create the ui section for the new block
-  ui = createSection("#blocks");
-  $('html, body').animate({scrollTop: $(document).height()}, 'slow');
+  ui = createSection("blocks");
+  document.body.animate({scrollTop: document.height}, 1000);
   // And do the work
   animationLoop();
 };
+
 
 const animationLoop = () => {
   if (matches.length == 0) {
@@ -286,9 +304,12 @@ const animationLoop = () => {
 window.addEventListener("DOMContentLoaded", async () => {
   maybeSetTokenFromHash();
   
-  initNetwork();
+  await initNetwork();
 
-  updateState();
+  await updateState();
+
+  ccv = CCVLib({});
+  cascade = [ccv.ccv_scd_classifier_cascade_read(ccv.CCV_SCD_FACE_FILE)];
   
   offscreen = document.createElement('canvas');
   offscreen.width = canvas_size;

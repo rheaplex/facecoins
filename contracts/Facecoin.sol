@@ -1,17 +1,47 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Facecoin is ERC721, ERC721Enumerable {
+/// @custom:security-contact rhea@myers.studio
+contract FaceCoin is ERC721, ERC721Enumerable, Pausable, Ownable {
     uint256 constant public NUM_TOKENS = 24;
     int256 constant internal MIN_CONTRAST = 32;
-    
-    constructor() ERC721("Facecoin", "FAC") {
+
+    constructor() ERC721("FaceCoin", "FAC") {
         for (uint256 i = 1; i <= NUM_TOKENS; i++) {
             _safeMint(msg.sender, i);
         }
+    }
+
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        _unpause();
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+        internal
+        whenNotPaused
+        override(ERC721, ERC721Enumerable)
+    {
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+
+    // The following functions are overrides required by Solidity.
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 
     /*
@@ -26,17 +56,19 @@ contract Facecoin is ERC721, ERC721Enumerable {
     function tokenPalette(uint256 tokenId)
         public
         view
-        returns (uint24[2] memory)
+        returns (uint8[3][2] memory)
     {
         require(
             tokenId > 0 && tokenId <= NUM_TOKENS,
             "tokenId out of range"
         );
         bytes32 hash = sha256(abi.encodePacked(ownerOf(tokenId), tokenId));
-        uint24 background = extractRgb(hash, 0);
-        uint24 foreground;
-        for (uint256 i = 1; i < 10; i++) {
-            foreground = extractRgb(hash, 1);
+        uint8[3] memory background;
+        uint8[3] memory foreground;
+        extractRgb(hash, 0, background);
+        // Ethereum addresses are 20 bytes.
+        for (uint256 i = 15; i < 32; i += 3) {
+            extractRgb(hash, 1, foreground);
             if (contrastRgbs(background, foreground) <= MIN_CONTRAST) {
                 break;
             }
@@ -49,15 +81,13 @@ contract Facecoin is ERC721, ERC721Enumerable {
       of a uint24 in order.
      */
 
-    function extractRgb(bytes32 hash, uint256 index)
+    function extractRgb(bytes32 hash, uint256 index, uint8[3] memory rgb)
         internal
         pure
-        returns (uint24 rgb)
     {
-        uint256 start = index * 3;
-        rgb |= uint24(uint8(hash[start]));
-        rgb |= (uint24(uint8(hash[start + 1])) >> 8);
-        rgb |= (uint24(uint8(hash[start + 2])) >> 16);
+        rgb[0] = uint8(hash[index]);
+        rgb[1] = uint8(hash[index + 1]);
+        rgb[2] = uint8(hash[index + 2]);
     }
 
     /*
@@ -65,21 +95,19 @@ contract Facecoin is ERC721, ERC721Enumerable {
       encoded as uint24s.
     */
 
-    function contrastRgbs(uint24 ua, uint24 ub)
+    function contrastRgbs(uint8[3] memory ua, uint8[3] memory ub)
         internal
         pure
         returns (int256)
     {
-        int256 a = int256(int24(ua));
-        int256 b = int256(int24(ub));
         return
-            abs((a & 0xff) - (b & 0xff))
-            + abs(((a & 0xff00) - (b & 0xff00)) >> 8)
-            + abs(((a & 0xff0000) - (b & 0xff0000)) >> 16);
+            abs((int256(uint256(ua[0]))) - (int256(uint256(ub[0]))))
+            +  abs((int256(uint256(ua[1]))) - (int256(uint256(ub[1]))))
+            +  abs((int256(uint256(ua[2]))) - (int256(uint256(ub[2]))));
     }
 
     /*
-      Solidity doesn't have this yet. o_O
+      Solidity doesn't have this.
     */
     
     function abs(int256 x)
@@ -88,21 +116,5 @@ contract Facecoin is ERC721, ERC721Enumerable {
         returns (int256)
     {
         return x >= 0 ? x : -x;
-    }
-
-    function _beforeTokenTransfer(address from, address to, uint256 tokenId)
-        internal
-        override(ERC721, ERC721Enumerable)
-    {
-        super._beforeTokenTransfer(from, to, tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, ERC721Enumerable)
-        returns (bool)
-    {
-        return super.supportsInterface(interfaceId);
     }
 }

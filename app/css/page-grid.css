@@ -2,6 +2,8 @@
     margin: 0 16px;
     display: inline-block;
     vertical-align: top;
+    width: 256px;
+    height: 490px;
 }
 
 .page-grid-inner {
