@@ -1,5 +1,6 @@
 //    facecoin.js - Face recognition in hashes as aesthetic proof of work.
-//    Copyright (C) 2014,2018,2022 Rhea Myers <rhea@myers.studio>
+//    Copyright (C) 2014,2018 Rhea Myers <rhea@myers.studio>
+//    Copyright (C) 2022,2023 Myers Studio Ltd.
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -14,23 +15,22 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-/* global localStorage requestAnimFrame URL */
-/* global CCVLib stackBlurCanvasRGB */
+/* global cascade ccv stackBlurCanvasRGB */
 
-import { ethers } from "./ethers.js";
 
 ///////////////////////////////////////////////////////////////////////////////
 // Configuration
 ///////////////////////////////////////////////////////////////////////////////
 
-const digest_size = 64;
-const bitmap_size = 8;
+const bitmap_size = 16; // 8 for 8-bit
 const canvas_size = 256;
 const canvas_scale = canvas_size / bitmap_size;
 const blur_radius = 10; // 32
 const match_line_width = 2;
+const half_match_line_width = match_line_width / 2;
 const extra_text_height = 234;
 const truncate_blocks_at = 128;
+
 const NUM_TOKENS = 16;
 const DEFAULT_TOKEN_ID = 1;
 
@@ -44,11 +44,7 @@ let ui;
 
 let tokenId;
 
-let ccv;
-let cascade;
-
-let offscreen;
-let offscreen_context;
+let blurredFaceCanvas;
 
 let foreground;
 let background;
@@ -56,21 +52,9 @@ let tries;
 let digest;
 let previousDigest;
 
+let startBlockNumber;
+
 let matches;
-
-///////////////////////////////////////////////////////////////////////////////
-// Utility code
-///////////////////////////////////////////////////////////////////////////////
-
-// Request the next animation frame on any platform version
-
-window.requestAnimFrame =
-  window.requestAnimationFrame  ||
-  window.webkitRequestAnimationFrame ||
-  window.mozRequestAnimationFrame    ||
-  (callback => {
-    window.setTimeout(callback, 1000 / 60);
-  });
 
 ///////////////////////////////////////////////////////////////////////////////
 // Create UI for each block
@@ -85,7 +69,7 @@ const createSection = where => {
   canvas.width = canvas_size;
   canvas.height = canvas_size;
   const caption = document.createElement("p");
-  caption.style['overflow-wrap'] = 'break-word';
+  caption.style["overflow-wrap"] = "break-word";
   caption.style.width = canvas_size;
   figure.append(canvas);
   figure.append(caption);
@@ -94,7 +78,7 @@ const createSection = where => {
     figure: figure,
     canvas: canvas,
     caption: caption,
-    ctx: canvas.getContext('2d')
+    ctx: canvas.getContext("2d")
   };
 };
 
@@ -102,9 +86,15 @@ const createSection = where => {
 // The digest
 ///////////////////////////////////////////////////////////////////////////////
 
-const newDigest = () => {
-  const hash = sjcl.hash.sha256.hash(previousDigest + tries);
-  const digest = sjcl.codec.hex.fromBits(hash);
+const sha256Hex = async data => Array.from(
+  new Uint8Array(
+    await crypto.subtle.digest("SHA-256",
+                               new TextEncoder().encode(data))
+  )).map((bytes) => bytes.toString(16).padStart(2, "0"))
+      .join("");
+
+const newDigest = async () => {
+  const digest = await sha256Hex(previousDigest + tries);
   // Ensure the first and subsequent layouts line up
   const prev = previousDigest ? previousDigest : "None<br /><br />" ;
   ui.caption.innerHTML = "<b>Previous&nbsp;Digest:</b>&nbsp;" + prev +
@@ -117,11 +107,11 @@ const newDigest = () => {
 // Drawing the digest as a bitmap
 ///////////////////////////////////////////////////////////////////////////////
 
-const pixelValue8Bit = (x, y, bitmap_width, digest) => {
+/*const pixelValue8Bit = (x, y, bitmap_width, digest) => {
   const index = x + (y * bitmap_width);
   const grey = parseInt(digest[index], 16) * 16;
   return grey;
-};
+};*/
 
 const pixelValue1Bit = (x, y, bitmap_width, digest) => {
   const byte_index = Math.floor((x + (y * bitmap_width)) / 4);
@@ -151,15 +141,10 @@ const drawFace = (ui, digest) => {
   }
 };
 
-///////////////////////////////////////////////////////////////////////////////
-// Making a blurred copy of the canvas to help detect faces more robustly
-///////////////////////////////////////////////////////////////////////////////
-
-let copyBlurred = (ui) => {
-  offscreen_context.drawImage(ui.canvas, 0, 0);
-  stackBlurCanvasRGB(offscreen_context, 0, 0, canvas_size, canvas_size,
-                     blur_radius);
-  ui.ctx.drawImage(offscreen, 0, 0);
+const copyFaceBlurred = (srcCanvas, destCanvas) => {
+  const destCtx = destCanvas.getContext("2d");
+  destCtx.drawImage(srcCanvas, 0, 0);
+  stackBlurCanvasRGB(destCtx, 0, 0, canvas_size, canvas_size, blur_radius);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -167,22 +152,12 @@ let copyBlurred = (ui) => {
 ///////////////////////////////////////////////////////////////////////////////
 
 const detectFace = canvas => {
-  const image = new ccv.ccv_dense_matrix_t();
-  ccv.ccv_read(offscreen, image, ccv.CCV_IO_GRAY);
-/*  var matches = ccv.detect_objects(
-    { "canvas" : offscreen)),
+  //copyFaceBlurred(canvas, blurredFaceCanvas);
+  const matches = ccv.detect_objects(
+    { "canvas" : ccv.grayscale(ccv.pre(canvas)),
       "cascade" : cascade,
-      "interval" : 10, // 5
-      "min_neighbors" : 5 }); // 1 */
-  const rects = ccv.ccv_scd_detect_objects(
-    image,
-    cascade,
-    1,
-    ccv.ccv_scd_default_params
-  );
-  const matches = rects.toJS();
-  rects.delete();
-  image.delete();
+      "interval" : 5,
+      "min_neighbors" : 1 });
   return matches;
 };
 
@@ -191,22 +166,36 @@ const drawMatches = (ui, matches) => {
   // In testing, multiples were overlapping matches of the same feature
   const match = matches[0];
   //matches.forEach(function(match) {
-  //TODO: Clamp to bitmap pixel boundaries
-  drawMatch(match.x, match.y, match.width, match.height);
-  //});
-};
-
-const drawMatch = (match_x, match_y, match_width, match_height) => {
-  const x = Math.ceil(match_x / canvas_scale) * canvas_scale;
-  const y = Math.ceil(match_y / canvas_scale) * canvas_scale;
-  const width = Math.floor(match_width / canvas_scale) * canvas_scale;
-  const height = Math.floor(match_height / canvas_scale) * canvas_scale;
+  // Un-clamped values, for comparison
+  /*console.log(match);
+  ui.ctx.lineWidth = match_line_width;
+  ui.ctx.strokeStyle = "rgb(0, 0, 255)";
+  // Inset the box, especially for bitmap edges so lines are always same width
+  ui.ctx.rect(
+    match.x,
+    match.y,
+    match.width,
+    match.height
+  );*/
+  // Clamp to bitmap pixel boundaries
+  const x = Math.round(match.x / canvas_scale);
+  const y = Math.round(match.y / canvas_scale);
+  const width = Math.round(match.width / canvas_scale);
+  const height = Math.round(match.height / canvas_scale);
   ui.ctx.lineWidth = match_line_width;
   ui.ctx.strokeStyle = "rgb(255, 0, 0)";
-  ui.ctx.rect(x ? x : 1, y ? y : 1, width, height);
+  // Inset the box, especially for bitmap edges so lines are always same width
+  ui.ctx.rect(
+    (x  * canvas_scale) + half_match_line_width,
+    (y * canvas_scale) + half_match_line_width,
+    (width * canvas_scale) - half_match_line_width,
+    (height * canvas_scale) - half_match_line_width
+  );
   ui.ctx.stroke();
-  ui.caption.innerHTML += "<br /><b>Face:</b>&nbsp;" +
-    x + "," + y + "," + (x + width) + "," + (y + height);
+  // LTRB "litterbug" order co-ordinates (makes sense for top left 0, 0)
+  ui.caption.innerHTML +=
+    `<br /><b>Face:</b>&nbsp; ${x}, ${y}, ${x + width}, ${y + height}`;
+  //});
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -228,11 +217,14 @@ const maybeSetTokenFromHash = () => {
 ///////////////////////////////////////////////////////////////////////////////
 
 let facecoinContract;
+let provider;
 
 const initNetwork = async () => {
-  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  // Just reload the window if the network changes
+  provider.on("chainChanged", () => { window.location.reload(); });
   const facecoinJson = await ethers.utils.fetchJson(
-    './js/FaceCoin.json'
+    "./js/FaceCoin.json"
   );
   facecoinContract = new ethers.Contract(
     facecoinJson.networks[(await provider.getNetwork()).chainId].address,
@@ -249,16 +241,26 @@ const initNetwork = async () => {
   facecoinContract.on(transfer, onFacecoinTransfer);
 };
 
-const onFacecoinTransfer = async (from, to, id) => {
-    updateState();
+const onFacecoinTransfer = async (from, to, id, ...rest) => {
+  // Ignore a transfer that happens in the current block.
+  const event = rest[rest.length - 1];
+  if(event.blockNumber <= startBlockNumber) {
+    return;
+  }
+  await updateState();
+  nextBlock();
 };
 
 const updateState = async () => {
-  const palette = await facecoinContract.tokenPalette(tokenId);
-  background = `rgb(${palette[0].join(',')})`;
-  foreground = `rgb(${palette[1].join(',')})`;
-  tries = tokenId;
-  previousDigest = await facecoinContract.ownerOf(tokenId);
+  const palette = [[255, 255, 255], [0, 0, 0]];/*await facecoinContract
+        .tokenPalette(ethers.BigNumber.from(tokenId));*/
+  background = `rgb(${palette[0].join(",")})`;
+  foreground = `rgb(${palette[1].join(",")})`;
+  matches = false;
+  tries = 0;
+  previousDigest = "";/*await facecoinContract
+    .ownerOf(ethers.BigNumber.from(tokenId));*/
+  startBlockNumber = 0;
   digest = null;
 };
 
@@ -268,7 +270,7 @@ const updateState = async () => {
 
 const nextBlock = () => {
   // Don't add too many elements to the page, we don't want to hog memory
-  const elements = document.getElementsByClassName('page-grid-cell');
+  const elements = document.getElementsByClassName("page-grid-cell");
   const to_truncate_at = Math.floor(truncate_blocks_at / 2);
   while (elements.length >= to_truncate_at)
   {
@@ -276,7 +278,7 @@ const nextBlock = () => {
     element.parentNode.removeChild(element);
   }
   // Set up the state for the new block
-  matches = Array();
+  matches = false;
   tries = 0;
   // Create the ui section for the new block
   ui = createSection("blocks");
@@ -286,35 +288,37 @@ const nextBlock = () => {
 };
 
 
-const animationLoop = () => {
-  if (matches.length == 0) {
-    requestAnimFrame(animationLoop);
-    tries = tries + 1;
-    digest = newDigest();
-    drawFace(ui, digest);
-    copyBlurred(ui);
-    matches = detectFace(ui.canvas);
-  } else {
-    drawMatches(ui, matches);
+const animationLoop = async () => {
+  if (matches != false) {
+    drawMatches(ui.canvas, matches);
     previousDigest = digest;
     nextBlock();
+  } else {
+    window.requestAnimationFrame(animationLoop);
+    tries = tries + 1;
+    digest = await newDigest();
+    drawFace(ui, digest);
+    //copyBlurred(ui);
+    matches = await detectFace(ui.canvas);
   }
 };
 
-window.addEventListener("DOMContentLoaded", async () => {
-  maybeSetTokenFromHash();
-  
-  await initNetwork();
+const loadingFinished = () => {
+  const loading = document.getElementById("loading");
+    loading.parentNode.removeChild(loading);
+};
 
+window.addEventListener("DOMContentLoaded", async () => {
+  //maybeSetTokenFromHash();
+  
+  blurredFaceCanvas = document.createElement("canvas");
+  blurredFaceCanvas.width = canvas_size;
+  blurredFaceCanvas.height = canvas_size;
+  
+  //await initNetwork();
   await updateState();
 
-  ccv = CCVLib({});
-  cascade = [ccv.ccv_scd_classifier_cascade_read(ccv.CCV_SCD_FACE_FILE)];
+  loadingFinished();
   
-  offscreen = document.createElement('canvas');
-  offscreen.width = canvas_size;
-  offscreen.height = canvas_size;
-  offscreen_context = offscreen.getContext('2d');
-
   nextBlock();
 });

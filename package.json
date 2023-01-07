@@ -1,13 +1,20 @@
 {
   "devDependencies": {
-    "@openzeppelin/contracts": "^4.7.3"
+    "@openzeppelin/contracts": "^4.7.3",
+    "eslint": "^8.31.0"
   },
   "scripts": {
     "test": "truffle test",
-    "ethnode": "ganache --port 9545 --chain.chainId 1337 --chain.networkId 1337  --mnemonic 'test test test test test test test test test test test junk'",
-    "develop": "truffle console --network development",
-    "serve": "http-server --port 7777 --cors ./app"
+    "lintjs": "npx eslint app/js/facecoin.js migrations/* test/*",
+    "lintsol": "solium -d contracts",
+    "ethnode": "ganache --miner.blockTime 15 --port 9545 --chain.chainId 1337 --chain.networkId 1337  --mnemonic 'test test test test test test test test test test test junk'",
+    "develop": "truffle console --network develop",
+    "serve": "http-server ./app --port 7777 --cors",
+    "build-local": "truffle migrate --network develop && cp ./build/contracts/FaceCoin.json ./app/js/"
   },
+  "keywords": [],
+  "author": "Rhea Myers",
+  "license": "GPL-v3-or-later",
   "dependencies": {
     "@truffle/hdwallet-provider": "^2.1.4"
   }

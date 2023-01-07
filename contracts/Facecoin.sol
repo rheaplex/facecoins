@@ -109,7 +109,7 @@ contract FaceCoin is ERC721, ERC721Enumerable, Pausable, Ownable {
     /*
       Solidity doesn't have this.
     */
-    
+
     function abs(int256 x)
         internal
         pure

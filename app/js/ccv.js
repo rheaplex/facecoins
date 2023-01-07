@@ -450,11 +450,13 @@ var ccv = {
 
 onmessage = function (event) {
 	var data = (typeof event.data == "string") ? JSON.parse(event.data) : event.data;
-	var scope = { "shared" : data.shared };
-	var result = parallable.core[data.name].apply(scope, [data.input, data.id, data.worker]);
-	try {
-		postMessage(result);
-	} catch (e) {
-		postMessage(JSON.stringify(result));
-	}
+  if (parallable.core[data.name]) {
+	  var scope = { "shared" : data.shared };
+	  var result = parallable.core[data.name].apply(scope, [data.input, data.id, data.worker]);
+	  try {
+		  postMessage(result);
+	  } catch (e) {
+		  postMessage(JSON.stringify(result));
+	  }
+  }
 }
