@@ -1,6 +1,6 @@
-//    facecoin.js - Face recognition in hashes as aesthetic proof of work.
-//    Copyright (C) 2014,2018 Rhea Myers <rhea@myers.studio>
-//    Copyright (C) 2022,2023 Myers Studio Ltd.
+//    facecoin.js - Face recognition in hash bitmaps as aesthetic proof of work.
+//    Copyright (C) 2014, 2020 Rhea Myers <rhea@myers.studio>
+//    Copyright (C) 2023 Myers Studio Ltd.
 //
 //    This program is free software: you can redistribute it and/or modify
 //    it under the terms of the GNU General Public License as published by
@@ -17,16 +17,15 @@
 
 /* global cascade ccv stackBlurCanvasRGB */
 
-
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Configuration
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-const bitmap_size = 16; // 8 for 8-bit
+const bitmap_size = 16;
 const canvas_size = 256;
 const canvas_scale = canvas_size / bitmap_size;
-const blur_radius = 10; // 32
-const match_line_width = 2;
+const blur_radius = 5;
+const match_line_width = 1;
 const half_match_line_width = match_line_width / 2;
 const extra_text_height = 234;
 const truncate_blocks_at = 128;
@@ -34,34 +33,31 @@ const truncate_blocks_at = 128;
 const NUM_TOKENS = 16;
 const DEFAULT_TOKEN_ID = 1;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Globals
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 // Should encapsulate
 
 let ui;
-
-let tokenId;
-
-let blurredFaceCanvas;
-
-let foreground;
-let background;
+let matches;
 let tries;
 let digest;
 let previousDigest;
 
+let tokenId;
 let startBlockNumber;
 
-let matches;
+let foregroundColour;
+let backgroundColour;
+let blurredFaceCanvas;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Create UI for each block
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 const createSection = where => {
-  const figure = document.createElement("span");
+    const figure = document.createElement("span");
   figure.classList.add("page-grid-cell");
   // This is so the first cell isn't shorter than the others
   figure.style.height = canvas_size + extra_text_height;
@@ -82,9 +78,9 @@ const createSection = where => {
   };
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // The digest
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 const sha256Hex = async data => Array.from(
   new Uint8Array(
@@ -98,22 +94,16 @@ const newDigest = async () => {
   // Ensure the first and subsequent layouts line up
   const prev = previousDigest ? previousDigest : "None<br /><br />" ;
   ui.caption.innerHTML = "<b>Previous&nbsp;Digest:</b>&nbsp;" + prev +
-    "&nbsp;<br /><b>Nonce:</b>&nbsp;" + tries +
-    "<br /><b>SHA&#8209;256:</b>&nbsp;" + digest;
+    "&nbsp;<br /><b>Proof-of-Work Nonce:</b>&nbsp;" + tries.toString(16) +
+    "<br /><b>Proof&#8209;of&#8209;Work&nbsp;Hash:</b>&nbsp;" + digest;
   return digest;
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Drawing the digest as a bitmap
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-/*const pixelValue8Bit = (x, y, bitmap_width, digest) => {
-  const index = x + (y * bitmap_width);
-  const grey = parseInt(digest[index], 16) * 16;
-  return grey;
-};*/
-
-const pixelValue1Bit = (x, y, bitmap_width, digest) => {
+const pixelValue = (x, y, bitmap_width, digest, foreground, background) => {
   const byte_index = Math.floor((x + (y * bitmap_width)) / 4);
   const bit_index = (x + (y * bitmap_width)) % 4;
   let colour;
@@ -125,34 +115,29 @@ const pixelValue1Bit = (x, y, bitmap_width, digest) => {
   return colour;
 };
 
-const pixelValue = pixelValue1Bit;
-
-// Ideally we'd just upscale and tween pixel values, but this looks better
-
-const drawFace = (ui, digest) => {
+const drawFace = (ctx, digest, foreground, background) => {
    for(let y = 0; y < bitmap_size; y++) {
     for (let x = 0; x < bitmap_size; x++) {
-      const colour = pixelValue(x, y, bitmap_size, digest);
+      ctx.fillStyle = pixelValue(
+        x, y, bitmap_size, digest, foreground, background
+      );
       // Slower than other alternatives, but clear
-      ui.ctx.fillStyle = colour;
-      ui.ctx.fillRect(x * canvas_scale, y * canvas_scale,
+      ctx.fillRect(x * canvas_scale, y * canvas_scale,
                       canvas_scale, canvas_scale);
     }
   }
 };
 
-const copyFaceBlurred = (srcCanvas, destCanvas) => {
-  const destCtx = destCanvas.getContext("2d");
-  destCtx.drawImage(srcCanvas, 0, 0);
-  stackBlurCanvasRGB(destCtx, 0, 0, canvas_size, canvas_size, blur_radius);
+const drawFaceMonoBlurred = (offscreenCtx, digest) => {
+  drawFace(offscreenCtx, digest, "black", "white");
+  stackBlurCanvasRGB(offscreenCtx, 0, 0, canvas_size, canvas_size, blur_radius);
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Detecting the face in the digest bitmap
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 const detectFace = canvas => {
-  //copyFaceBlurred(canvas, blurredFaceCanvas);
   const matches = ccv.detect_objects(
     { "canvas" : ccv.grayscale(ccv.pre(canvas)),
       "cascade" : cascade,
@@ -182,8 +167,10 @@ const drawMatches = (ui, matches) => {
   const y = Math.round(match.y / canvas_scale);
   const width = Math.round(match.width / canvas_scale);
   const height = Math.round(match.height / canvas_scale);
+  ui.ctx.shadowColor = "#fff";
+  ui.ctx.shadowBlur = 4;
   ui.ctx.lineWidth = match_line_width;
-  ui.ctx.strokeStyle = "rgb(255, 0, 0)";
+  ui.ctx.strokeStyle = "#000";
   // Inset the box, especially for bitmap edges so lines are always same width
   ui.ctx.rect(
     (x  * canvas_scale) + half_match_line_width,
@@ -231,13 +218,12 @@ const initNetwork = async () => {
     facecoinJson.abi,
     provider
   );
-
   const transfer = facecoinContract.filters.Transfer(
     null,
     null,
     ethers.BigNumber.from(tokenId)
   );
-  
+  startBlockNumber = await provider.getBlockNumber();
   facecoinContract.on(transfer, onFacecoinTransfer);
 };
 
@@ -252,33 +238,30 @@ const onFacecoinTransfer = async (from, to, id, ...rest) => {
 };
 
 const updateState = async () => {
-  const palette = [[255, 255, 255], [0, 0, 0]];/*await facecoinContract
-        .tokenPalette(ethers.BigNumber.from(tokenId));*/
-  background = `rgb(${palette[0].join(",")})`;
-  foreground = `rgb(${palette[1].join(",")})`;
+  const palette = await facecoinContract
+        .tokenPalette(ethers.BigNumber.from(tokenId));
+  backgroundColour = `rgb(${palette[0].join(",")})`;
+  foregroundColour = `rgb(${palette[1].join(",")})`;
   matches = false;
   tries = 0;
-  previousDigest = "";/*await facecoinContract
-    .ownerOf(ethers.BigNumber.from(tokenId));*/
-  startBlockNumber = 0;
+  previousDigest = await facecoinContract
+    .ownerOf(ethers.BigNumber.from(tokenId));
   digest = null;
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Main flow of execution
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 const nextBlock = () => {
   // Don't add too many elements to the page, we don't want to hog memory
   const elements = document.getElementsByClassName("page-grid-cell");
-  const to_truncate_at = Math.floor(truncate_blocks_at / 2);
-  while (elements.length >= to_truncate_at)
-  {
+  while (elements.length >= truncate_blocks_at) {
     const element = elements[0];
     element.parentNode.removeChild(element);
   }
   // Set up the state for the new block
-  matches = false;
+  matches = Array();
   tries = 0;
   // Create the ui section for the new block
   ui = createSection("blocks");
@@ -287,38 +270,30 @@ const nextBlock = () => {
   animationLoop();
 };
 
-
 const animationLoop = async () => {
-  if (matches != false) {
-    drawMatches(ui.canvas, matches);
-    previousDigest = digest;
-    nextBlock();
-  } else {
+  if (matches.length == 0) {
     window.requestAnimationFrame(animationLoop);
     tries = tries + 1;
     digest = await newDigest();
-    drawFace(ui, digest);
-    //copyBlurred(ui);
-    matches = await detectFace(ui.canvas);
+    drawFace(ui.ctx, digest, foregroundColour, backgroundColour);
+    drawFaceMonoBlurred(blurredFaceCanvas.getContext("2d"), digest);
+    matches = detectFace(blurredFaceCanvas);
+  } else {
+    drawMatches(ui, matches);
+    previousDigest = digest;
+    nextBlock();
   }
 };
 
-const loadingFinished = () => {
-  const loading = document.getElementById("loading");
-    loading.parentNode.removeChild(loading);
-};
-
 window.addEventListener("DOMContentLoaded", async () => {
-  //maybeSetTokenFromHash();
-  
+  maybeSetTokenFromHash();
+
   blurredFaceCanvas = document.createElement("canvas");
   blurredFaceCanvas.width = canvas_size;
   blurredFaceCanvas.height = canvas_size;
-  
-  //await initNetwork();
-  await updateState();
 
-  loadingFinished();
+  await initNetwork();
+  await updateState();
   
   nextBlock();
 });
