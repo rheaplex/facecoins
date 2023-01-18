@@ -13,6 +13,8 @@ contract FaceCoin is ERC721, ERC721Enumerable, Pausable, Ownable {
     uint256 constant public NUM_TOKENS = 24;
     int256 constant internal MIN_CONTRAST = 32;
 
+    string private baseUri;
+
     constructor() ERC721("FaceCoin", "FAC") {
         for (uint256 i = 1; i <= NUM_TOKENS; i++) {
             _safeMint(msg.sender, i);
@@ -25,6 +27,14 @@ contract FaceCoin is ERC721, ERC721Enumerable, Pausable, Ownable {
 
     function unpause() public onlyOwner {
         _unpause();
+    }
+
+    function _baseURI() internal view virtual override returns (string memory) {
+        return baseUri;
+    }
+
+    function setBaseUri(string calldata newUri) external onlyOwner {
+        baseUri = newUri;
     }
 
     function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
