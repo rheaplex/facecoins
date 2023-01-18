@@ -5,12 +5,16 @@
   },
   "scripts": {
     "test": "truffle test",
-    "lintjs": "npx eslint app/js/facecoin.js migrations/* test/*",
-    "lintsol": "solium -d contracts",
+    "eslint": "npx eslint app/js/facecoin.js migrations/*.js test/*.js",
+    "solium": "solium -d contracts",
+    "ethlint": "solhint contracts/*.sol",
+    "mythx": "mythx analyze --solc-path /usr/local/bin/solc contracts/*.sol",
     "ethnode": "ganache --miner.blockTime 15 --port 9545 --chain.chainId 1337 --chain.networkId 1337  --mnemonic 'test test test test test test test test test test test junk'",
     "develop": "truffle console --network develop",
     "serve": "http-server ./app --port 7777 --cors",
-    "build-local": "truffle migrate --network develop && cp ./build/contracts/FaceCoin.json ./app/js/"
+    "build-local": "truffle migrate --network develop && cp ./build/contracts/FaceCoin.json ./app/js/",
+    "dashboard-mainnet": "truffle dashboard",
+    "deploy-mainnet": "truffle deploy --network dashboard"
   },
   "keywords": [],
   "author": "Rhea Myers",
