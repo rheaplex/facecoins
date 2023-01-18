@@ -15,11 +15,12 @@ module.exports = {
     dashboard: {
     },
   },
-  // Set default mocha options here, use special reporters, etc.
   mocha: {
     // timeout: 100000
   },
-  // Configure your compilers
+  plugins: [
+    'truffle-plugin-stdjsonin'
+  ],
   compilers: {
     solc: {
       version: "0.8.17", // Fetch exact version from solc-bin (default: truffle's version)

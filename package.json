@@ -1,7 +1,8 @@
 {
   "devDependencies": {
     "@openzeppelin/contracts": "^4.7.3",
-    "eslint": "^8.31.0"
+    "eslint": "^8.31.0",
+    "truffle-plugin-stdjsonin": "github:mhrsalehi/truffle-plugin-stdjsonin"
   },
   "scripts": {
     "test": "truffle test",
@@ -15,11 +16,14 @@
     "build-local": "truffle migrate --network develop && cp ./build/contracts/FaceCoin.json ./app/js/",
     "dashboard-mainnet": "truffle dashboard",
     "deploy-mainnet": "truffle deploy --network dashboard",
-    "flatten": "truffle-flattener contracts/Facecoin.sol > Facecoin-flattened.sol"
+    "flatten": "truffle run stdjsonin FaceCoin && mv ./Facecoin-input.json ./flattened"
   },
-  "author": "Rhea Myers",  
-  "keywords": ["art", "blockchain"],
-  "description": "Your own sketch of a blockchain based on your cryptographic dientity, in your browser.",  
+  "author": "Rhea Myers",
+  "keywords": [
+    "art",
+    "blockchain"
+  ],
+  "description": "Your own sketch of a blockchain based on your cryptographic dientity, in your browser.",
   "license": "GPL-v3-or-later",
   "dependencies": {
     "@truffle/hdwallet-provider": "^2.1.4"
