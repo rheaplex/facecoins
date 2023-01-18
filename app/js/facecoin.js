@@ -103,6 +103,20 @@ const newDigest = async () => {
 // Drawing the digest as a bitmap
 ////////////////////////////////////////////////////////////////////////////////
 
+/*const lerpColour = (value, foreground, background) => {
+  const r = background[0] + ((foreground[0] / 255.0) * value);
+  const g = background[1] + ((foreground[1] / 255.0) * value);
+  const b = background[2] + ((foreground[2] / 255.0) * value);
+};
+
+const pixelValue8Bit = (x, y, bitmap_width, digest , foreground, background)
+      =>
+{
+  var index = x + (y * bitmap_width);
+  var grey = parseInt(digest[index], 16) * 16;
+  return grey;
+};*/
+
 const pixelValue = (x, y, bitmap_width, digest, foreground, background) => {
   const byte_index = Math.floor((x + (y * bitmap_width)) / 4);
   const bit_index = (x + (y * bitmap_width)) % 4;

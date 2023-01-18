@@ -14,10 +14,12 @@
     "serve": "http-server ./app --port 7777 --cors",
     "build-local": "truffle migrate --network develop && cp ./build/contracts/FaceCoin.json ./app/js/",
     "dashboard-mainnet": "truffle dashboard",
-    "deploy-mainnet": "truffle deploy --network dashboard"
+    "deploy-mainnet": "truffle deploy --network dashboard",
+    "flatten": "truffle-flattener contracts/Facecoin.sol > Facecoin-flattened.sol"
   },
-  "keywords": [],
-  "author": "Rhea Myers",
+  "author": "Rhea Myers",  
+  "keywords": ["art", "blockchain"],
+  "description": "Your own sketch of a blockchain based on your cryptographic dientity, in your browser.",  
   "license": "GPL-v3-or-later",
   "dependencies": {
     "@truffle/hdwallet-provider": "^2.1.4"

@@ -1,3 +1,21 @@
+Facecoin Edition
+================
+
+By Rhea Myers.
+
+Your own sketch of a blockchain based on your cryptographic dientity, in your browser.
+
+The generated images show the tokens at the time of deployment. Use the app code for a live view.
+
+
+Licensing
+=========
+
+Code: GPLv3 or later at your option.
+
+Images (live and generated): CC0 if copyrightable.
+
+
 Development
 ===========
 
