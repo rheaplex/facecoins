@@ -13,7 +13,8 @@ contract FaceCoin is ERC721, ERC721Enumerable, Pausable, Ownable {
     uint256 constant public NUM_TOKENS = 24;
     int256 constant internal MIN_CONTRAST = 32;
 
-    string private baseUri;
+    // Initial metadata URI
+    string private baseUri = "ipfs://QmUseBfYK2oVs31mxedQb3v2qX5bZ1CjWNieEN5APRZLBB/";
 
     constructor() ERC721("FaceCoin", "FAC") {
         for (uint256 i = 1; i <= NUM_TOKENS; i++) {

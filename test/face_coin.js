@@ -11,9 +11,9 @@ contract("FaceCoin", function (accounts) {
   it("owner can transfer ERC721 tokens", async () => {
     const fc = await FaceCoin.deployed();
     try {
-      const result = await fc.transferFrom(accounts[0],
-                                            accounts[1],
-                                               1);
+      await fc.transferFrom(accounts[0],
+                            accounts[1],
+                            1);
     } catch (error) {
       assert(false, "Owner should be able to transfer FC tokens");
     }
@@ -27,7 +27,9 @@ contract("FaceCoin", function (accounts) {
                                 2,
                                 {from: accounts[2]});
       assert(false, "FC should throw if non-owner tries to transfer token");
-    } catch (error) {}
+    } catch (error) {
+      // test passed OK
+    }
   });
 
   it("token URLs can be updated", async () => {
@@ -41,7 +43,9 @@ contract("FaceCoin", function (accounts) {
     try {
       await fc.setBaseUri("aaa://newerurl/", { from: accounts[2] });
       assert(false, "FC should throw if non-owner tries to set base URL");
-    } catch (error) {}
+    } catch (error) {
+      // test passed OK
+    }
   });
 
 });
