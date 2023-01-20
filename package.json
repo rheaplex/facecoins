@@ -13,10 +13,10 @@
     "ethnode": "ganache --miner.blockTime 15 --port 9545 --chain.chainId 1337 --chain.networkId 1337  --mnemonic 'test test test test test test test test test test test junk'",
     "develop": "truffle console --network develop",
     "serve": "http-server ./app --port 7777 --cors",
-    "build-local": "truffle migrate --network develop && cp ./build/contracts/FaceCoin.json ./app/js/",
+    "build-local": "truffle migrate --network develop && cp ./build/contracts/Facecoin.json ./app/js/",
     "dashboard-mainnet": "truffle dashboard",
     "deploy-mainnet": "truffle deploy --network dashboard",
-    "flatten": "truffle run stdjsonin FaceCoin && mv ./Facecoin-input.json ./flattened"
+    "flatten": "truffle run stdjsonin Facecoin && mv ./Facecoin-input.json ./flattened"
   },
   "author": "Rhea Myers",
   "keywords": [

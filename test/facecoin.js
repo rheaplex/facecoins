@@ -1,15 +1,15 @@
-const FaceCoin = artifacts.require("FaceCoin");
+const Facecoin = artifacts.require("Facecoin");
 
 const NUM_TOKENS = 24;
 
-contract("FaceCoin", function (accounts) {
+contract("Facecoin", function (accounts) {
   it("correct number of ERC721 tokens should exist", async () => {
-    const fc = await FaceCoin.deployed();
+    const fc = await Facecoin.deployed();
     assert.equal((await fc.totalSupply()).toNumber(), NUM_TOKENS);
   });
 
   it("owner can transfer ERC721 tokens", async () => {
-    const fc = await FaceCoin.deployed();
+    const fc = await Facecoin.deployed();
     try {
       await fc.transferFrom(accounts[0],
                             accounts[1],
@@ -20,7 +20,7 @@ contract("FaceCoin", function (accounts) {
   });
 
   it("only owner can transfer ERC721 tokens", async () => {
-    const fc = await FaceCoin.deployed();
+    const fc = await Facecoin.deployed();
     try {
       await fc.transferFrom(accounts[1],
                                 accounts[2],
@@ -33,13 +33,13 @@ contract("FaceCoin", function (accounts) {
   });
 
   it("token URLs can be updated", async () => {
-    const fc = await FaceCoin.deployed();
+    const fc = await Facecoin.deployed();
     await fc.setBaseUri("aaa://newurl/");
     assert.equal(await fc.tokenURI(3), "aaa://newurl/3");
   });
 
   it("only owner can set token URLs", async () => {
-    const fc = await FaceCoin.deployed();
+    const fc = await Facecoin.deployed();
     try {
       await fc.setBaseUri("aaa://newerurl/", { from: accounts[2] });
       assert(false, "FC should throw if non-owner tries to set base URL");
