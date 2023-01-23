@@ -225,7 +225,7 @@ const initNetwork = async () => {
   // Just reload the window if the network changes
   provider.on("chainChanged", () => { window.location.reload(); });
   const facecoinJson = await ethers.utils.fetchJson(
-    "./js/FaceCoin.json"
+    "./js/Facecoin.json"
   );
   facecoinContract = new ethers.Contract(
     facecoinJson.networks[(await provider.getNetwork()).chainId].address,
