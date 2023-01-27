@@ -279,7 +279,7 @@ const nextBlock = () => {
   tries = 0;
   // Create the ui section for the new block
   ui = createSection("blocks");
-  document.body.animate({scrollTop: document.height}, 1000);
+  ui.figure.scrollIntoView({behavior: "smooth", block: "end"});
   // And do the work
   animationLoop();
 };

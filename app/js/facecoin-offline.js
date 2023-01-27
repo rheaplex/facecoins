@@ -219,11 +219,9 @@ const updateState = async () => {
   for (let i = 0; i < tokenId; i++) {
     previousDigest = await sha256Hex(previousDigest);
   }
-  console.log(previousDigest);
   previousDigest = "0x" + previousDigest.substring(24);
   backgroundColour = `#${previousDigest.substring(2, 8)}`;
   foregroundColour = `#${previousDigest.substring(8, 14)}`;
-  console.log([foregroundColour, backgroundColour]);
   matches = false;
   tries = 0;
   digest = null;
@@ -245,7 +243,7 @@ const nextBlock = () => {
   tries = 0;
   // Create the ui section for the new block
   ui = createSection("blocks");
-  document.body.animate({scrollTop: document.height}, 1000);
+  ui.figure.scrollIntoView({behavior: "smooth", block: "end"});
   // And do the work
   animationLoop();
 };
