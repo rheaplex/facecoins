@@ -30,7 +30,7 @@ const half_match_line_width = match_line_width / 2;
 const extra_text_height = 234;
 const truncate_blocks_at = 128;
 
-const NUM_TOKENS = 16;
+const NUM_TOKENS = 24;
 const DEFAULT_TOKEN_ID = 1;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -299,7 +299,7 @@ const animationLoop = async () => {
   }
 };
 
-window.addEventListener("DOMContentLoaded", async () => {
+window.addEventListener("load", async () => {
   maybeSetTokenFromHash();
 
   blurredFaceCanvas = document.createElement("canvas");
